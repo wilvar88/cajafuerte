@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Caja Fuerte</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <!-- Background Animated Elements for Depth -->
+    <div class="bg-shape bg-shape-1"></div>
+    <div class="bg-shape bg-shape-2"></div>
+    <div class="bg-shape bg-shape-3"></div>
+
+    <!-- Main Glass UI -->
+    <main class="glass-container">
+        
+        <!-- Top Dashboard (Hidden by default) -->
+        <header id="dashboard" class="glass-panel top-bar hidden">
+            <div class="user-info">
+                <div class="user-avatar"></div>
+                <div class="user-details">
+                    <span id="user-name" class="fw-bold">Usuario</span>
+                    <span id="user-id" class="text-xs text-dim">ID: ---</span>
+                </div>
+            </div>
+            <div class="stats-row">
+                <div class="stat-box">
+                    <span class="label">Intentos</span>
+                    <span class="value" id="attempts-val">-</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Nivel</span>
+                    <span class="value" id="level-val">-</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Promedio</span>
+                    <span class="value" id="avg-val">-</span>
+                </div>
+            </div>
+            <div class="timer-control">
+                <div id="chrono-display" class="time-display fw-bold">00.0s</div>
+                <button id="toggle-timer-btn" class="glass-btn btn-small">Ocultar</button>
+            </div>
+        </header>
+
+        <div class="content-area">
+            <!-- Screen 1: Start Menu -->
+            <section id="screen-start" class="screen flex-col active">
+                <h1 class="title-main">Simulador de Caja Fuerte</h1>
+                <p class="subtitle">Selecciona un modo para iniciar</p>
+                
+                <div class="action-buttons">
+                    <button id="btn-training" class="glass-btn primary btn-large">
+                        <svg viewBox="0 0 24 24" fill="none" class="icon"><path d="M12 14l9-5-9-5-9 5 9 5z" fill="currentColor"/><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" fill="currentColor"/></svg>
+                        Modo Entrenamiento
+                    </button>
+                    <button id="btn-certification" class="glass-btn secondary btn-large">
+                        <svg viewBox="0 0 24 24" fill="none" class="icon"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Modo Certificación
+                    </button>
+                </div>
+                
+                <div class="qr-interfaces">
+                    <div class="qr-card glass-panel">
+                        <div class="qr-placeholder" id="qr-mirror"></div>
+                        <span class="qr-text">Modo Espejo (Móvil)</span>
+                        <div class="qr-status online">Localhost</div>
+                    </div>
+                    <div class="qr-card glass-panel">
+                        <div class="qr-placeholder" id="qr-individual"></div>
+                        <span class="qr-text">Evaluación Individual</span>
+                        <div class="qr-status waiting">Esperando...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Screen 2: Login -->
+            <section id="screen-login" class="screen flex-col hidden">
+                <button id="btn-login-back" class="glass-btn btn-icon back-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <div class="glass-panel login-card">
+                    <div class="login-header">
+                        <h2>Acceso a Certificación</h2>
+                        <p>Ingrese su documento para validar intentos</p>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="login-id" class="glass-input" placeholder="Ej. 12345678" autocomplete="off">
+                    </div>
+                    <button id="btn-login-submit" class="glass-btn primary btn-full">Validar y Comenzar</button>
+                    <div id="login-error" class="error-msg text-xs hidden">Usuario no encontrado o sin intentos.</div>
+                </div>
+            </section>
+
+            <!-- Screen 3: Simulator -->
+            <section id="screen-simulator" class="screen hidden">
+                <div class="safe-wrapper">
+                    <!-- Dynamic Combination Display -->
+                    <div id="combo-display" class="combo-display glass-panel">
+                        <span class="combo-label text-dim text-xs">SECUENCIA (IZQ, DER, IZQ, DER)</span>
+                        <div class="combo-steps">
+                            <span class="step-chip">4 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg> <b id="c-val-1">--</b></span>
+                            <span class="step-chip">3 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg> <b id="c-val-2">--</b></span>
+                            <span class="step-chip">2 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg> <b id="c-val-3">--</b></span>
+                            <span class="step-chip">1 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg> <b id="c-val-4">--</b></span>
+                        </div>
+                    </div>
+
+                    <!-- Digital Display -->
+                    <div class="display-box glass-panel inset-shadow">
+                        <div class="display-glass"></div>
+                        <span id="dial-display" class="digital-text">00</span>
+                    </div>
+                    
+                    <!-- Mechanical Dial -->
+                    <div class="dial-container glass-panel">
+                        <div class="dial-outer glow-ring">
+                            <!-- JS generates numbers 0-99 -->
+                            <div class="dial-numbers" id="dial-numbers"></div>
+                            
+                            <div id="dial-knob" class="dial-knob shadow-3d">
+                                <div class="dial-texture"></div>
+                                <div class="dial-mark-top"></div>
+                                <div class="dial-grip">
+                                    <!-- JS generates grip ridges -->
+                                </div>
+                                <div class="dial-center glass-panel">
+                                    <div class="center-core"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="reference-mark">
+                            <svg viewBox="0 0 24 24" fill="var(--light-blue)"><path d="M12 2L2 22h20L12 2z"/></svg>
+                        </div>
+                    </div>
+
+                    <div class="action-footer">
+                        <div class="feedback-indicator" id="seq-feedback">Secuencia lista</div>
+                        
+                        <div class="action-buttons-bottom">
+                            <button id="btn-restart" class="glass-btn outline">Reiniciar</button>
+                            <button id="btn-quit" class="glass-btn danger">Abandonar</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Interactive Tour Overlay -->
+    <div id="tour-overlay" class="glass-overlay hidden">
+        <div class="tour-card glass-panel pop-in">
+            <h3 id="tour-title" class="tour-title">Bienvenido al Tour</h3>
+            <p id="tour-text" class="tour-text">Aprenderás a maniobrar la caja fuerte con dial mecánico.</p>
+            <div class="tour-progress">
+                <div class="dot active"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+            <div class="tour-actions">
+                <button id="btn-tour-skip" class="glass-btn text-only text-dim">Saltar Tour</button>
+                <button id="btn-tour-next" class="glass-btn primary">Siguiente</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner Overlay -->
+    <div id="loading" class="glass-overlay hidden">
+        <div class="spinner-ring"></div>
+        <p class="loading-text">Validando...</p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
