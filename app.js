@@ -21,6 +21,12 @@ const CONFIG = {
     }
 };
 
+// --- PeerJS / Mirror State ---
+let peer = null;
+let peerConn = null;
+const isMirrorClient = new URLSearchParams(window.location.search).has('mirror');
+const hostPeerId = new URLSearchParams(window.location.search).get('mirror');
+
 // UI Elements
 const els = {
     screens: document.querySelectorAll('.screen'),
@@ -256,7 +262,7 @@ function initDial() {
         if (delta < -Math.PI) delta += 2 * Math.PI;
         
         let sensitivity = 1;
-        if (state.inputMode === 'mouse') sensitivity = 0.25; // Mucho menos sensible
+        if (state.inputMode === 'mouse') sensitivity = 0.45; // Incrementado a petición del usuario
         else if (state.inputMode === 'touch') sensitivity = 0.7; // Táctil normal-bajo
         
         const degDelta = delta * (180 / Math.PI) * sensitivity;
@@ -273,7 +279,11 @@ function initDial() {
     });
 }
 
-function updateDial(angle) {
+function updateDial(angle, fromRemote = false) {
+    if (isMirrorClient && peerConn && peerConn.open && !fromRemote) {
+        peerConn.send({ type: 'rotate', angle: angle });
+    }
+
     state.currentAngle = angle;
     els.dialKnob.style.transform = `rotate(${angle}deg)`;
     document.getElementById('dial-numbers').style.transform = `rotate(${angle}deg)`;
@@ -413,6 +423,8 @@ function calculateScore(ms) {
 }
 
 function finishAttempt() {
+    if (isMirrorClient) return; // Solo el host lanza guardar intento
+    
     const score = calculateScore(state.elapsedMs);
     const secs = formatTime(state.elapsedMs);
     
@@ -692,8 +704,71 @@ window.addEventListener('deviceorientation', (e) => {
     updateDial(newAngle);
 });
 
+// --- Webrtc Mirror Init ---
+function initPeer() {
+    peer = new Peer();
+    
+    if (isMirrorClient) {
+        // Somos el móvil actuando como control
+        state.inputMode = 'sensor';
+        const sensorRadio = document.querySelector('input[value="sensor"]');
+        if (sensorRadio) sensorRadio.checked = true;
+        
+        peer.on('open', (id) => {
+            peerConn = peer.connect(hostPeerId);
+            peerConn.on('open', () => {
+                Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Conectado a Pantalla PC', showConfirmButton: false, timer: 3000 });
+                // Forzamos que se inicien los sensores en el móvil tras conectarse
+                enableSensor();
+            });
+        });
+        
+    } else {
+        // Somos la compu anfitriona (Host)
+        peer.on('open', (id) => {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('mirror', id);
+            
+            const qrContainer = document.getElementById('qr-mirror');
+            if (qrContainer) {
+                qrContainer.innerHTML = '';
+                qrContainer.classList.remove('qr-placeholder');
+                
+                new QRCode(qrContainer, {
+                    text: currentUrl.toString(),
+                    width: 120,
+                    height: 120,
+                    colorDark : "#ffffff",
+                    colorLight : "transparent",
+                    correctLevel : QRCode.CorrectLevel.L
+                });
+                
+                const qrStatus = qrContainer.parentElement.querySelector('.qr-status');
+                if (qrStatus) {
+                    qrStatus.textContent = 'En Línea';
+                    qrStatus.className = 'qr-status online';
+                }
+            }
+        });
+        
+        peer.on('connection', (conn) => {
+            peerConn = conn;
+            conn.on('data', (data) => {
+                if (data.type === 'rotate') {
+                    // Update host dial sin rebote
+                    updateDial(data.angle, true);
+                }
+            });
+            conn.on('open', () => {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Móvil Conectado como Control', showConfirmButton: false, timer: 3000 });
+            });
+        });
+    }
+}
+
 // Init
 window.addEventListener('DOMContentLoaded', () => {
     initDial();
     initCombo(CONFIG.combo); // Init basic layout before fetch finishes
+    initPeer(); // Inicializar PeerJS 
 });
