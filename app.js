@@ -76,6 +76,11 @@ const state = {
     mode: null, // 'training' | 'certification'
     user: null,
     
+    // Inputs Control
+    inputMode: 'mouse', // 'mouse' | 'touch' | 'sensor'
+    sensorActive: false,
+    lastSensorAngleDeg: null,
+    
     // Timer
     startTime: 0,
     timerInt: null,
@@ -220,14 +225,15 @@ function initDial() {
     const knob = els.dialKnob;
     
     knob.addEventListener('pointerdown', (e) => {
+        if (state.inputMode === 'sensor') return; // Ignore drag if using sensor
+        
         const rect = knob.getBoundingClientRect();
         centerX = rect.left + rect.width / 2;
         centerY = rect.top + rect.height / 2;
         
         const x = e.clientX - centerX;
         const y = e.clientY - centerY;
-        startAngle = Math.atan2(y, x);
-        startRotation = state.currentAngle;
+        startAngle = Math.atan2(y, x); // Treated as lastAngle
         state.isRotating = true;
         
         knob.setPointerCapture(e.pointerId);
@@ -239,7 +245,7 @@ function initDial() {
     });
 
     knob.addEventListener('pointermove', (e) => {
-        if (!state.isRotating) return;
+        if (!state.isRotating || state.inputMode === 'sensor') return;
         
         const x = e.clientX - centerX;
         const y = e.clientY - centerY;
@@ -249,8 +255,14 @@ function initDial() {
         if (delta > Math.PI) delta -= 2 * Math.PI;
         if (delta < -Math.PI) delta += 2 * Math.PI;
         
-        const degDelta = delta * (180 / Math.PI);
-        let newAngle = startRotation + degDelta;
+        let sensitivity = 1;
+        if (state.inputMode === 'mouse') sensitivity = 0.25; // Mucho menos sensible
+        else if (state.inputMode === 'touch') sensitivity = 0.7; // Táctil normal-bajo
+        
+        const degDelta = delta * (180 / Math.PI) * sensitivity;
+        
+        startAngle = angle; // Actualizar para el siguiente frame
+        let newAngle = state.currentAngle + degDelta;
         
         updateDial(newAngle);
     });
@@ -592,6 +604,92 @@ els.btnTourNext.addEventListener('click', () => {
 els.btnTourSkip.addEventListener('click', () => {
     els.tourOverlay.classList.add('hidden');
     resetSequence();
+});
+
+// --- Input Modes & Sensor Logic ---
+document.querySelectorAll('input[name="input-mode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        state.inputMode = e.target.value;
+        if (state.inputMode === 'sensor') {
+            enableSensor();
+        } else {
+            disableSensor();
+        }
+    });
+});
+
+function enableSensor() {
+    // Si estamos en un dispositivo iOS que requiere permisos
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+            .then(permissionState => {
+                if (permissionState === 'granted') {
+                    startSensorReading();
+                } else {
+                    Swal.fire('Error', 'Permiso denegado para sensores. Usa Mouse o Táctil.', 'error');
+                    document.querySelector('input[value="mouse"]').click();
+                    state.inputMode = 'mouse';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Error', 'No se pudo activar el sensor.', 'error');
+            });
+    } else {
+        startSensorReading();
+    }
+}
+
+function disableSensor() {
+    state.sensorActive = false;
+    state.lastSensorAngleDeg = null;
+    els.dialContainer.style.borderColor = "";
+}
+
+function startSensorReading() {
+    state.sensorActive = true;
+    state.lastSensorAngleDeg = null;
+    els.dialContainer.style.borderColor = "var(--success)"; // feedback visual rápido
+    
+    Swal.fire({
+        title: 'Modo Dial Físico',
+        text: 'Coloca el teléfono en vertical (parado) y gíralo como volante.',
+        icon: 'info',
+        confirmButtonColor: '#01326c',
+        background: 'rgba(1, 50, 108, 0.9)',
+        color: '#fff'
+    });
+}
+
+window.addEventListener('deviceorientation', (e) => {
+    if (state.inputMode !== 'sensor' || !state.sensorActive) return;
+    
+    // Cálculo de ángulo basado en gravedad (Volante Vertical)
+    // Beta: arriba/abajo, Gamma: izquierda/derecha
+    const angleRad = Math.atan2(e.gamma, e.beta);
+    let angleDeg = angleRad * (180 / Math.PI);
+    
+    if (state.lastSensorAngleDeg === null) {
+        state.lastSensorAngleDeg = angleDeg;
+        
+        // Empezar timer en certificación al primer giro con el sensor
+        if (state.mode === 'certification' && !state.timerRunning) {
+            startTimer();
+        }
+        return;
+    }
+    
+    let delta = angleDeg - state.lastSensorAngleDeg;
+    
+    // Normalizar cruce de 180 a -180
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    
+    state.lastSensorAngleDeg = angleDeg;
+    
+    // Acumular giro actual. Multiplicador para balancear con el mundo real
+    let newAngle = state.currentAngle + (delta * 1.0); 
+    updateDial(newAngle);
 });
 
 // Init
