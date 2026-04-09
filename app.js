@@ -706,63 +706,73 @@ window.addEventListener('deviceorientation', (e) => {
 
 // --- Webrtc Mirror Init ---
 function initPeer() {
-    peer = new Peer();
-    
-    if (isMirrorClient) {
-        // Somos el móvil actuando como control
-        state.inputMode = 'sensor';
-        const sensorRadio = document.querySelector('input[value="sensor"]');
-        if (sensorRadio) sensorRadio.checked = true;
-        
-        peer.on('open', (id) => {
-            peerConn = peer.connect(hostPeerId);
-            peerConn.on('open', () => {
-                Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Conectado a Pantalla PC', showConfirmButton: false, timer: 3000 });
-                // Forzamos que se inicien los sensores en el móvil tras conectarse
-                enableSensor();
-            });
-        });
-        
-    } else {
-        // Somos la compu anfitriona (Host)
-        peer.on('open', (id) => {
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.set('mirror', id);
-            
-            const qrContainer = document.getElementById('qr-mirror');
-            if (qrContainer) {
-                qrContainer.innerHTML = '';
-                qrContainer.classList.remove('qr-placeholder');
-                
-                new QRCode(qrContainer, {
-                    text: currentUrl.toString(),
-                    width: 120,
-                    height: 120,
-                    colorDark : "#ffffff",
-                    colorLight : "transparent",
-                    correctLevel : QRCode.CorrectLevel.L
-                });
-                
-                const qrStatus = qrContainer.parentElement.querySelector('.qr-status');
-                if (qrStatus) {
-                    qrStatus.textContent = 'En Línea';
-                    qrStatus.className = 'qr-status online';
-                }
+    try {
+        peer = new Peer({
+            config: {
+                'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
             }
         });
         
-        peer.on('connection', (conn) => {
-            peerConn = conn;
-            conn.on('data', (data) => {
-                if (data.type === 'rotate') {
-                    // Update host dial sin rebote
-                    updateDial(data.angle, true);
+        peer.on('error', (err) => {
+            console.error('PeerJS Error:', err);
+            Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: 'Error P2P: ' + err.type, showConfirmButton: false, timer: 3000 });
+        });
+
+        if (isMirrorClient) {
+            // Somos el móvil actuando como control
+            state.inputMode = 'sensor';
+            const sensorRadio = document.querySelector('input[value="sensor"]');
+            if (sensorRadio) sensorRadio.checked = true;
+            
+            // Ocultamos dashboard para enfocar en ser control
+            if (els.dashboard) els.dashboard.style.display = 'none';
+            
+            peer.on('open', (id) => {
+                peerConn = peer.connect(hostPeerId);
+                peerConn.on('open', () => {
+                    Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Conectado a Pantalla PC', showConfirmButton: false, timer: 3000 });
+                    // Forzamos que se inicien los sensores en el móvil tras conectarse
+                    enableSensor();
+                });
+            });
+            
+        } else {
+            // Somos la compu anfitriona (Host)
+            peer.on('open', (id) => {
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('mirror', id);
+                
+                const qrContainer = document.getElementById('qr-mirror');
+                if (qrContainer) {
+                    qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(currentUrl.toString())}&bgcolor=255-255-255" alt="Código QR de Espejo" style="border-radius: 8px;">`;
+                    qrContainer.classList.remove('qr-placeholder');
+                    
+                    const qrStatus = qrContainer.parentElement.querySelector('.qr-status');
+                    if (qrStatus) {
+                        qrStatus.textContent = 'En Línea';
+                        qrStatus.className = 'qr-status online';
+                    }
                 }
             });
-            conn.on('open', () => {
-                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Móvil Conectado como Control', showConfirmButton: false, timer: 3000 });
+            
+            peer.on('connection', (conn) => {
+                peerConn = conn;
+                conn.on('data', (data) => {
+                    if (data.type === 'rotate') {
+                        // Update host dial sin rebote
+                        updateDial(data.angle, true);
+                    }
+                });
+                conn.on('open', () => {
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Móvil Conectado como Control', showConfirmButton: false, timer: 3000 });
+                });
             });
-        });
+        }
+    } catch(err) {
+        console.error("Error inicializando PeerJS:", err);
     }
 }
 
